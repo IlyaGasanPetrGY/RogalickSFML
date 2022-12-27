@@ -4,6 +4,7 @@
 #include "map.h"
 #include "mapresourses.h"
 #include "mapwalls.h"
+#include "poisonsmap.h"
 
 using namespace sf;
 
@@ -11,18 +12,22 @@ using namespace sf;
 
 class Player { // класс Игрока
 public:
+    enum {left, right, up, down, stay} state;
     int playerScore = 0;
     float x, y, w, h, dx, dy, speed; //координаты игрока х и у, высота и ширина,
     //ускорение (по х и по у), сама скорость
-    int dir; //направление (direction) движения игрока
+    int health; //направление (direction) движения игрока
+    bool life;
     std::string File; //файл с расширением
     Image image;//сфмл изображение
     Texture texture;//сфмл текстура
     Sprite sprite;//сфмл спрайт
+    float CurrentFrame = 0;//хранит текущий кадр
     //Конструктор с параметрами для класса Player. При создании объекта класса мы будем задавать
     //имя файла, координату Х и У, ширину и высоту
     Player(std::string F, float X, float Y, float W, float H){
-
+        life = true;
+        state = stay;
         File = F; //имя файла+расширение
         w = W; h = H; //высота и ширина
         image.loadFromFile("images/" + File);//загружаем в image изображение, вместо File
@@ -33,84 +38,116 @@ public:
         sprite.setTexture(texture); //заливаем спрайт текстурой
         x = X; y = Y; //координата появления спрайта
          speed= 0;
-         dir= 0;
+         health = 100;
         sprite.setTextureRect(IntRect(0, 0, w, h)); //Задаем спрайту один прямоугольник для
     //вывода одного льва. IntRect – для приведения типов
     }
+    void control(){
+        if (Keyboard::isKeyPressed(Keyboard::Left) || Keyboard::isKeyPressed(Keyboard::A)) {
+            state = left;
+            speed = 0.1;
+        }
+        if (Keyboard::isKeyPressed(Keyboard::Right) || Keyboard::isKeyPressed(Keyboard::D)) {
+            state = right;
+            speed = 0.1;
+        }
+        if (Keyboard::isKeyPressed(Keyboard::Up) || Keyboard::isKeyPressed(Keyboard::W)) {
+            state = up;
+            speed = 0.1;
+        }
+        if (Keyboard::isKeyPressed(Keyboard::Down) || Keyboard::isKeyPressed(Keyboard::S)) {
+            state = down;
+            speed = 0.1;
+        }
+    }
 
     void update(float time) //функция "оживления/обновления" объекта класса. Принимает в себя
-        //время SFML, вследствие чего работает бесконечно, давая персонажу движение.
+    //время SFML, вследствие чего работает бесконечно, давая персонажу движение.
     {
-        switch (dir)//реализуем поведение в зависимости от направления. Каждая цифра
-        //соответствует направлению.
+    if (life) {//проверяем, жив ли герой
+        control();//функция управления персонажем
+        switch (state)//тут делаются различные действия в зависимости от состояния
         {
-            case 0:
+            case right:{//состояние идти вправо
                 dx = speed;
-                dy = 0;
-                break; //по “X” задаем положительную скорость, по “Y” - 0.
-            //Персонаж идет только вправо.
-            case 1:
+                CurrentFrame += 0.005*time;
+                if (CurrentFrame > 3) CurrentFrame -= 3;
+                sprite.setTextureRect(IntRect(32 * int(CurrentFrame), 160, 32, 32));
+                sprite.setScale({1,1});
+                break;
+            }
+            case left:{//состояние идти влево
                 dx = -speed;
-                dy = 0;
-
-
-                break;//по “X” задаем отрицательную скорость, по и “Y” – 0.
-            //Персонаж идет только влево.
-            case 2:
-                dx = 0;
-                dy = speed;
-                break;//по “X” задаем нулевое значение, по “Y”
-            //положительное. Получается, что персонаж идет только вниз
-            case 3:
-                dx = 0;
+                CurrentFrame += 0.005*time;
+                if (CurrentFrame > 3) CurrentFrame -= 3;
+                sprite.setTextureRect(IntRect(96 * int(CurrentFrame), 160, 32, 32));
+                sprite.setScale({-1,1});
+                break;
+            }
+            case up:{//идти вверх
                 dy = -speed;
-                break;//по “X” задаем нулевое значение, по “Y”
-            //отрицательное. Получается, что персонаж идет только вверх
+                CurrentFrame += 0.005*time;
+                if (CurrentFrame > 3) CurrentFrame -= 3;
+                sprite.setTextureRect(IntRect(96 * int(CurrentFrame), 192, 32, 32));
+                break;
+            }
+            case down:{//идти вниз
+                dy = speed;
+                CurrentFrame += 0.005*time;
+                if (CurrentFrame > 3) CurrentFrame -= 3;
+                sprite.setTextureRect(IntRect(96 * int(CurrentFrame), 132, 32, 32));
+                break;
+            }
+            case stay:{//стоим
+                dy = speed;
+                dx = speed;
+                break;
+            }
         }
         x += dx*time; //движение по “X”
+        checkCollisionWithMap(dx, 0);//обрабатываем столкновение по Х
         y += dy*time; //движение по “Y”
+        checkCollisionWithMap(0, dy);//обрабатываем столкновение по Y
         speed = 0; //обнуляем скорость, чтобы персонаж остановился.
-        sprite.setPosition(x, y); //выводим спрайт в позицию (x, y).
-        interactionWithMap();
-        //бесконечно выводим в этой функции, иначе бы наш спрайт стоял на месте.
+        //state = stay; //состояние - стоит
+        sprite.setPosition(x, y); //переставляем спрайт в новую позицию (x, y).
+        if (health <= 0)
+        {
+            life = false;
+        }//если жизней меньше 0, либо равно 0, то умираем
     }
-    void interactionWithMap()//ф-ция взаимодействия с картой
-    {
-        //Проходим только по тем тайлам (квадратикам размера 32*32), которые контактируют с игроком.
-        //Частично или полностью находятся под изображением игрока!
-        for (int i = y / 32; i < (y + h) / 32; i++)
-            for (int j = x / 32; j<(x + w) / 32; j++){
-                //”x” делим на 32, тем самым получаем левый квадратик, с которым персонаж соприкасается.
-                //Он ведь больше размера 32*32, поэтому может одновременно стоять на нескольких тайлах
-                //Кроме того, j<(x + w)/32 - условие ограничения координат по “x”, т.е. координата самого
-                //правого квадрата, который соприкасается с персонажем. таким образом идем в цикле слева
-                // направо по иксу, проходя от левого квадрата (соприкасающегося с героем), до правого
-                // квадрата (соприкасающегося с героем)
-                if (TileMap_resourses[i][j] == '0')//если наш квадратик соответствует символу “0”
-                //(стена), то проверяем "направление скорости" персонажа:
-                {
-                    if (dy>0) {//если мы шли вниз,
-                        y = i * 32 - h;//то стопорим (-h) координату “y” персонажа.
-                    //сначала получаем координату “i” нашего квадратика на карте и
-                    //затем вычитаем из высоты спрайта персонажа.
-                    }
-                    if (dy<0){
-                        y = i * 32 + 32;//аналогично с движением вверх.
-                    }
-                    if (dx>0){
-                        x = j * 32 - w;//если идем вправо, то координата “x” равна
-                    //стена (символ 0) минус ширина персонажа
-                    }
-                    if (dx < 0){
-                        x = j * 32 + 32; //аналогично идем влево
-                    }
+    }
 
+
+    void checkCollisionWithMap(float Dx, float Dy) {
+        for (int i = y / 32; i < (y + h) / 32; i++)//проходимся по элементам карты
+            for (int j = x / 32; j<(x + w) / 32; j++)
+            {
+                if (TileMap[i][j] == '0')//если элемент тайлик земли
+                {
+                    if (Dy > 0) { y = i * 32 - h; dy = 0; }//по Y
+                    if (Dy < 0) { y = i * 32 + 32; dy = 0; }//столкновение с верхними краями карты
+                    if (Dx > 0) { x = j * 32 - w; dx = 0; }//с правым краем карты
+                    if (Dx < 0) { x = j * 32 + 32; dx = 0; }// с левым краем карты
                 }
-                if (TileMap_resoursesForEat[i][j] == 'p'){
-                    playerScore++;
+                if (TileMap_resoursesForEat[i][j] == 'p') {
+                    playerScore++; //если взяли камень, переменная playerScore=playerScore+1;
                     TileMap_resoursesForEat[i][j] = ' ';
                 }
-        }
+                if (TileMap_poison[i][j] == 'd') {
+                    health -= 40;//если взяли ядовитый цветок,то переменная health=health-40;
+                    TileMap_poison[i][j] = ' ';//убрали цветок
+                }
+                if (TileMap[i][j] == 'h') {
+                    health += 20;//если взяли сердечко,то переменная health=health+20;
+                    TileMap[i][j] = ' ';//убрали сердечко
+                }
+            }
+    }
+
+    FloatRect getRect(){//метод получения прямоугольника. его коорд, размеры (шир,высот).
+        FloatRect FR(x, y, w, h); // переменная FR типа FloatRect
+        return FR;
     }
 };
 void DrawingFloore(Sprite s_map, RenderWindow* window){
@@ -183,6 +220,24 @@ void DrawingResoursesForEat(Sprite s_map, RenderWindow* window){
         }
 }
 
+void DrawingPoisonMap(Sprite s_map, RenderWindow* window){
+    for (int i = 0; i < HEIGHT_MAP_poison; i++)
+        for (int j = 0; j < WIDTH_MAP_poison; j++)
+        {
+            if (TileMap_poison[i][j] == 'd')
+            {
+                s_map.setTextureRect(IntRect(0, 123, 16, 16));
+
+                s_map.setScale({2,2});
+                s_map.setPosition(j * 32, i * 32);//раскладываем квадратики в карту.
+
+                window->draw(s_map);
+
+            }
+
+        }
+}
+
 int main()
 {
     Font font;
@@ -192,6 +247,7 @@ int main()
     text.setColor(Color::Red);
 
     text.setStyle(sf::Text::Bold | sf::Text::Underlined);
+
 
 
     Image map_image;//объект изображения для карты
@@ -222,15 +278,21 @@ int main()
 
     bool flag = false;
 
+    float createObject = 0;
+
+    Clock gameTimeClock;//переменная игрового времени, будем здесь хранить время игры
+    int gameTime = 0;
+
+    Clock timerforspawn;
     while (window.isOpen())
     {
-
+        std::cout << p.speed;
+        float time2 = timerforspawn.getElapsedTime().asSeconds();
         // дать время с последнего перезапуска часов, в данном случае время, прошедшее с
         //предыдущей итерации и вызова restart();
         float time = clock.getElapsedTime().asMicroseconds();
         clock.restart(); //перезапуск часов
         time = time / 800; //скорость игры
-
 
 
 
@@ -240,56 +302,27 @@ int main()
                 window.close();
         }
 
+        createObject += time;
         //"-0,1" - будем считать скоростью, умножаем её на наше время “time” и получаем
         //пройденное расстояние
-        if ((Keyboard::isKeyPressed(Keyboard::Left)||(Keyboard::isKeyPressed(Keyboard::A)))) {
+        if (p.life) gameTime = gameTimeClock.getElapsedTime().asSeconds();
 
-            CurrentFrame += time*0.005;
-            if (CurrentFrame > 3) CurrentFrame -= 3;
-            p.dir = 1;
-            p.speed = 0.1;
-            p.sprite.setTextureRect(IntRect(32 * int(CurrentFrame), 160, 32, 32));
-            p.sprite.setScale({-1,1});
+        if (time2 > 10){
+            timerforspawn.restart();
+            randomMapGenerate();
         }
-        if ((Keyboard::isKeyPressed(Keyboard::Right)||(Keyboard::isKeyPressed(Keyboard::D)))) {
-            CurrentFrame += time*0.005;
-            if (CurrentFrame > 3) CurrentFrame -= 3;
-            p.dir = 0;
-            p.speed = 0.1;
-            p.sprite.setTextureRect(IntRect(96 * int(CurrentFrame), 160, 32, 32));
-            p.sprite.setScale({1,1});
-        }
-        if ((Keyboard::isKeyPressed(Keyboard::Up)||(Keyboard::isKeyPressed(Keyboard::W)))) {
-
-            CurrentFrame += time*0.005;
-            if (CurrentFrame > 3) CurrentFrame -= 3;
-            p.dir = 3;
-            p.speed = 0.1;
-            p.sprite.setTextureRect(IntRect(96 * int(CurrentFrame), 192, 32, 32));
-
-        }
-        if ((Keyboard::isKeyPressed(Keyboard::Down)||(Keyboard::isKeyPressed(Keyboard::S)))) {
-
-            CurrentFrame += time*0.005;
-            if (CurrentFrame > 3) CurrentFrame -= 3;
-            p.dir = 2;
-            p.speed = 0.1;
-            p.sprite.setTextureRect(IntRect(96 * int(CurrentFrame), 132, 32, 32));
-
-        }
-
-
 
 
 
         p.update(time);
         window.clear();
-
+        //оживляем объект “p” класса “Player” с помощью времени sfml,
+        // передавая время в качестве параметра функции update.
 
         DrawingFloore(s_map, &window);
         DrawingWalls(s_map, &window);
         DrawingResoursesForEat(s_map, &window);
-
+        DrawingPoisonMap(s_map, &window);
         std::ostringstream playerScoreString; // объявили переменную
         playerScoreString << p.playerScore;
 
