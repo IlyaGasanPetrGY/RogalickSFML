@@ -12,17 +12,15 @@ CONFIG(debug, debug|release):
 LIBS += -lsfml-audio-d -lsfml-graphics-d -lsfml-main-d -lsfml-network-d -lsfml-window-d -lsfml-system-d
 INCLUDEPATH += "D:\MainCourseProject\SFML-2.3.2\include"
 
-SOURCES += main.cpp
+SOURCES += main.cpp \
+    entity.cpp \
+    enemy.cpp
 
 
 include(deployment.pri)
 qtcAddDeployment()
 
 HEADERS += \
-    map.h \
-    mapresourses.h \
-    mapwalls.h \
-    poisonsmap.h \
-    entity.h
+    map.h
 
 
